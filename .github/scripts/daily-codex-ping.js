@@ -16,8 +16,9 @@ function buildIssueBody(date = new Date()) {
   return [
     `${marker}`,
     '',
-    `This issue was automatically created on ${isoDate} to trigger a fresh @codex task.`,
-    'It intentionally avoids reusing an old thread, so Codex does not inherit stale task context.'
+    `This issue was automatically created on ${isoDate} to trigger a fresh Codex task.`,
+    'The issue body intentionally does not mention Codex.',
+    'Codex will only be triggered once in a separate comment.'
   ].join('\n')
 }
 
@@ -26,7 +27,8 @@ function buildCommentBody(date = new Date()) {
   return [
     `${marker}`,
     '',
-    '@codex 请阅读当前仓库，并回复一句“ping received”。不要修改代码，不要创建 PR，只执行只读检查。'
+    '@codex Please read the current repository and reply with exactly: ping received',
+    'Do not modify files. Do not create a PR. Read-only check only.'
   ].join('\n')
 }
 
@@ -52,7 +54,7 @@ async function run({ github, context, core, dryRun = false, now = new Date() }) 
   const commentBody = buildCommentBody(now)
 
   if (dryRun) {
-    core.info('[DRY RUN] Would create a fresh issue and post a Codex comment')
+    core.info('[DRY RUN] Would create a fresh issue and post one Codex comment')
     return {
       dryRun: true,
       issueTitle,
