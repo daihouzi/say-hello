@@ -4,13 +4,14 @@
 
 仓库目前提供两种能力：
 
-1. **GitHub Actions 定时触发**：每天自动创建一条包含 `@codex` 的 Issue。
-2. **Node 脚本评论触发**：在指定（或自动解析的）Issue 下发布 `@codex` 评论。
+1. **GitHub Actions 定时触发（Issue 模式）**：每天自动创建一条包含 `@codex` 的 Issue。
+2. **GitHub Actions 定时触发（Comment 模式）**：每天自动在指定（或自动解析的）Issue 下发布 `@codex` 评论。
 
 ## 仓库结构
 
 - `.github/workflows/daily-codex-ping.yml`：定时工作流（每天 UTC 00:00，约北京时间 08:00）。
 - `.github/scripts/daily-codex-ping.js`：评论正文生成、目标 Issue 解析、评论发布逻辑。
+- `.github/workflows/daily-codex-comment.yml`：定时执行脚本，在 Issue 下发布评论。
 - `tests/daily-codex-ping.test.js`：脚本的基础单元测试。
 
 ## 工作流模式（每天创建 Issue）
@@ -22,7 +23,9 @@
 - 定时触发：每天 UTC 00:00。
 - 手动触发：在 GitHub Actions 页面使用 `workflow_dispatch`。
 
-## 脚本模式（在 Issue 下发评论）
+## Comment 工作流模式（在 Issue 下发评论）
+
+`daily-codex-comment.yml` 会定时执行脚本并发评论。
 
 脚本支持：
 
@@ -52,6 +55,13 @@ All tests passed
 - 需要每天自动“唤醒”或触发一次 `@codex` 协作流程。
 - 需要一个小体量、可测试、可扩展的自动化示例仓库。
 
-## 维护说明
+## 常见排查
 
-- 该仓库支持通过 PR 评论触发一次轻量 `@codex` 任务（例如“请执行一次轻量任务，用于触发 token 消耗”）。
+如果你发现“自动任务没有进行”，优先检查：
+
+- 工作流文件是否已经在默认分支（通常是 `main`）上。
+- 仓库 Actions 是否启用；若是长期无活动仓库，定时任务可能被 GitHub 自动暂停。
+- `Settings -> Actions -> General` 中，`GITHUB_TOKEN` 是否允许工作流写入 Issue。
+- 你要触发的是 Issue 还是 Comment：
+  - `daily-codex-ping.yml` 会创建新 Issue；
+  - `daily-codex-comment.yml` 才会在已有 Issue 下发评论。
