@@ -32,6 +32,17 @@ function buildCommentBody(date = new Date()) {
   ].join('\n')
 }
 
+function normalizeMode(mode = '') {
+  const value = String(mode).toLowerCase().trim()
+  if (value === 'pr' || value === 'pr_only') {
+    return 'pr_only'
+  }
+  if (value === 'both') {
+    return 'both'
+  }
+  return 'issue_only'
+}
+
 async function createFreshIssue({ github, context, core, now }) {
   const title = buildIssueTitle(now)
   const body = buildIssueBody(now)
@@ -48,48 +59,137 @@ async function createFreshIssue({ github, context, core, now }) {
   return issue
 }
 
-async function run({ github, context, core, dryRun = false, now = new Date() }) {
-  const issueTitle = buildIssueTitle(now)
-  const issueBody = buildIssueBody(now)
-  const commentBody = buildCommentBody(now)
-
-  if (dryRun) {
-    core.info('[DRY RUN] Would create a fresh issue and post one Codex comment')
-    return {
-      dryRun: true,
-      issueTitle,
-      issueBody,
-      commentBody
-    }
+async function resolvePullRequestNumber({ github, context, core, pullNumber }) {
+  if (pullNumber) {
+    return Number(pullNumber)
   }
 
-  const issue = await createFreshIssue({
-    github,
-    context,
-    core,
-    now
+  const { data: pulls } = await github.rest.pulls.list({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    state: 'open',
+    sort: 'updated',
+    direction: 'desc',
+    per_page: 20
   })
 
+  const target = pulls.find((pull) => !pull.draft)
+  if (!target) {
+    core.info('No open non-draft PR found for Codex PR ping')
+    return null
+  }
+
+  core.info(`Selected PR #${target.number} for Codex ping`)
+  return target.number
+}
+
+async function createCodexComment({ github, context, issueNumber, body }) {
   const { data: comment } = await github.rest.issues.createComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
-    issue_number: issue.number,
-    body: commentBody
+    issue_number: issueNumber,
+    body
   })
 
-  core.info(`Created comment ${comment.html_url}`)
-  return {
-    dryRun: false,
-    issueNumber: issue.number,
-    issue,
-    comment
+  return comment
+}
+
+async function run({
+  github,
+  context,
+  core,
+  dryRun = false,
+  mode = 'both',
+  pullNumber = '',
+  now = new Date()
+}) {
+  const normalizedMode = normalizeMode(mode)
+  const commentBody = buildCommentBody(now)
+
+  const shouldPingIssue = normalizedMode === 'both' || normalizedMode === 'issue_only'
+  const shouldPingPr = normalizedMode === 'both' || normalizedMode === 'pr_only'
+
+  const actions = []
+
+  if (shouldPingIssue) {
+    const issueTitle = buildIssueTitle(now)
+    const issueBody = buildIssueBody(now)
+    actions.push({ type: 'create_issue_and_comment', issueTitle, issueBody, commentBody })
   }
+
+  let resolvedPullNumber = null
+  if (shouldPingPr) {
+    resolvedPullNumber = await resolvePullRequestNumber({
+      github,
+      context,
+      core,
+      pullNumber
+    })
+
+    if (resolvedPullNumber) {
+      actions.push({ type: 'comment_pr', pullNumber: resolvedPullNumber, commentBody })
+    }
+  }
+
+  if (dryRun) {
+    core.info(`[DRY RUN] Mode=${normalizedMode}; planned actions=${actions.length}`)
+    return {
+      dryRun: true,
+      mode: normalizedMode,
+      actions
+    }
+  }
+
+  const result = {
+    dryRun: false,
+    mode: normalizedMode,
+    issueNumber: null,
+    issueCommentUrl: null,
+    pullNumber: resolvedPullNumber,
+    pullCommentUrl: null
+  }
+
+  if (shouldPingIssue) {
+    const issue = await createFreshIssue({
+      github,
+      context,
+      core,
+      now
+    })
+
+    const issueComment = await createCodexComment({
+      github,
+      context,
+      issueNumber: issue.number,
+      body: commentBody
+    })
+
+    result.issueNumber = issue.number
+    result.issueCommentUrl = issueComment.html_url
+    core.info(`Created issue comment ${issueComment.html_url}`)
+  }
+
+  if (shouldPingPr && resolvedPullNumber) {
+    const pullComment = await createCodexComment({
+      github,
+      context,
+      issueNumber: resolvedPullNumber,
+      body: commentBody
+    })
+
+    result.pullCommentUrl = pullComment.html_url
+    core.info(`Created PR comment ${pullComment.html_url}`)
+  }
+
+  return result
 }
 
 module.exports = {
   buildIssueTitle,
   buildIssueBody,
   buildCommentBody,
+  normalizeMode,
+  resolvePullRequestNumber,
   createFreshIssue,
   run
 }

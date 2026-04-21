@@ -25,15 +25,16 @@
 
 ## Comment 工作流模式（在 Issue 下发评论）
 
-`daily-codex-comment.yml` 会定时执行脚本并发评论。
+`daily-codex-comment.yml` 会定时执行脚本并发评论，默认同时在新建 Issue 和最近活跃 PR（可选）下各发一条 `@codex`。
 
 脚本支持：
 
 - 生成标准评论正文（含日期 marker + `@codex`）。
-- 自动解析目标 Issue：
-  - 优先使用传入的 `issueNumber`；
-  - 否则查找带 `codex-auto-ping` 标签的开放 Issue；
-  - 若仍不存在，则创建一个锚点 Issue。
+- 支持触发模式：`issue` / `pr` / `both`（默认 `both`）。
+- 自动解析目标 PR：
+  - 优先使用传入的 `pull_number`；
+  - 否则选择最近更新且非 draft 的开放 PR。
+- `both` 模式下会创建新 Issue 并在 Issue + PR 各发一次评论（若存在可用 PR）。
 - 支持 dry-run（只打印将执行的动作，不真正发评论）。
 
 ## 本地测试

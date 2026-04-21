@@ -1,7 +1,8 @@
 const assert = require('node:assert/strict')
 const {
   buildCommentBody,
-  resolveIssueNumber,
+  normalizeMode,
+  resolvePullRequestNumber,
   run
 } = require('../.github/scripts/daily-codex-ping')
 
@@ -13,66 +14,95 @@ async function testBuildCommentBody() {
   assert.match(body, /@codex/)
 }
 
-async function testResolveIssueNumberFromInput() {
-  const issueNumber = await resolveIssueNumber({
+async function testNormalizeMode() {
+  assert.equal(normalizeMode('both'), 'both')
+  assert.equal(normalizeMode('issue'), 'issue_only')
+  assert.equal(normalizeMode('pr'), 'pr_only')
+}
+
+async function testResolvePullRequestNumberFromInput() {
+  const pullNumber = await resolvePullRequestNumber({
     github: {},
     context: {},
     core: { info: () => {} },
-    issueNumber: '42'
+    pullNumber: '42'
   })
-  assert.equal(issueNumber, 42)
+
+  assert.equal(pullNumber, 42)
 }
 
-async function testResolveIssueNumberFromList() {
-  const issueNumber = await resolveIssueNumber({
+async function testResolvePullRequestNumberFromList() {
+  const pullNumber = await resolvePullRequestNumber({
     github: {
       rest: {
-        issues: {
-          listForRepo: async () => ({ data: [{ number: 9 }] })
+        pulls: {
+          list: async () => ({
+            data: [
+              { number: 11, draft: true },
+              { number: 9, draft: false }
+            ]
+          })
         }
       }
     },
     context: { repo: { owner: 'o', repo: 'r' } },
     core: { info: () => {} },
-    issueNumber: ''
+    pullNumber: ''
   })
 
-  assert.equal(issueNumber, 9)
+  assert.equal(pullNumber, 9)
 }
 
-async function testDryRun() {
+async function testDryRunBothMode() {
   const logs = []
   const result = await run({
     github: {
       rest: {
-        issues: {
-          listForRepo: async () => ({ data: [{ number: 3 }] })
+        pulls: {
+          list: async () => ({ data: [{ number: 13, draft: false }] })
         }
       }
     },
     context: { repo: { owner: 'o', repo: 'r' } },
     core: { info: (msg) => logs.push(msg) },
     dryRun: true,
+    mode: 'both',
     now: new Date('2026-04-20T00:00:00.000Z')
   })
 
   assert.equal(result.dryRun, true)
-  assert.equal(result.issueNumber, 3)
+  assert.equal(result.mode, 'both')
+  assert.equal(result.actions.length, 2)
   assert.match(logs.join('\n'), /DRY RUN/)
 }
 
-async function testCreateComment() {
-  let commented = false
+async function testCreateIssueAndPrComment() {
+  let createdIssue = false
+  let issueCommented = false
+  let prCommented = false
+
   const result = await run({
     github: {
       rest: {
+        pulls: {
+          list: async () => ({ data: [{ number: 21, draft: false }] })
+        },
         issues: {
-          listForRepo: async () => ({ data: [{ number: 7 }] }),
+          create: async () => {
+            createdIssue = true
+            return { data: { number: 7, html_url: 'https://example.com/issue/7' } }
+          },
           createComment: async (payload) => {
-            commented = true
-            assert.equal(payload.issue_number, 7)
+            if (payload.issue_number === 7) {
+              issueCommented = true
+            }
+
+            if (payload.issue_number === 21) {
+              prCommented = true
+            }
+
             assert.match(payload.body, /@codex/)
-            return { data: { html_url: 'https://example.com/comment/1' } }
+            return { data: { html_url: `https://example.com/comment/${payload.issue_number}` } }
           }
         }
       }
@@ -80,19 +110,25 @@ async function testCreateComment() {
     context: { repo: { owner: 'owner', repo: 'repo' } },
     core: { info: () => {} },
     dryRun: false,
+    mode: 'both',
     now: new Date('2026-04-20T00:00:00.000Z')
   })
 
-  assert.equal(commented, true)
+  assert.equal(createdIssue, true)
+  assert.equal(issueCommented, true)
+  assert.equal(prCommented, true)
   assert.equal(result.dryRun, false)
+  assert.equal(result.issueNumber, 7)
+  assert.equal(result.pullNumber, 21)
 }
 
 async function main() {
   await testBuildCommentBody()
-  await testResolveIssueNumberFromInput()
-  await testResolveIssueNumberFromList()
-  await testDryRun()
-  await testCreateComment()
+  await testNormalizeMode()
+  await testResolvePullRequestNumberFromInput()
+  await testResolvePullRequestNumberFromList()
+  await testDryRunBothMode()
+  await testCreateIssueAndPrComment()
   console.log('All tests passed')
 }
 

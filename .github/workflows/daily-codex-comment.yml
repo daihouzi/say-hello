@@ -10,10 +10,19 @@ on:
         description: 'Print action only, do not publish issue/comment'
         required: false
         default: 'false'
+      mode:
+        description: 'Ping mode: issue / pr / both'
+        required: false
+        default: 'both'
+      pull_number:
+        description: 'Optional target PR number when mode includes pr'
+        required: false
+        default: ''
 
 permissions:
   contents: read
   issues: write
+  pull-requests: read
 
 jobs:
   ping:
@@ -26,17 +35,24 @@ jobs:
         uses: actions/github-script@v9
         env:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          MODE: ${{ github.event.inputs.mode || 'both' }}
+          PULL_NUMBER: ${{ github.event.inputs.pull_number || '' }}
         with:
           script: |
-            const { run } = require('./.github/scripts/daily-codex-ping')  
-            // const { run } = require('./.github/scripts/old')
+            const { run } = require('./.github/scripts/daily-codex-ping')
 
             const dryRun = String(process.env.DRY_RUN).toLowerCase() === 'true'
+            const mode = String(process.env.MODE || 'both')
+            const pullNumber = String(process.env.PULL_NUMBER || '')
 
-            await run({
+            const result = await run({
               github,
               context,
               core,
               dryRun,
+              mode,
+              pullNumber,
               now: new Date()
             })
+
+            core.info(`Run result: ${JSON.stringify(result)}`)
