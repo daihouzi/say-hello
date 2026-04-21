@@ -28,7 +28,8 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         with:
           script: |
-            const { run } = require('./.github/scripts/daily-codex-ping')
+            # const { run } = require('./.github/scripts/daily-codex-ping')
+            const { run } = require('./.github/scripts/old')
 
             const dryRun = String(process.env.DRY_RUN).toLowerCase() === 'true'
 
