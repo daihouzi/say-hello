@@ -1,58 +1,62 @@
-name: Daily Codex Comment Ping
+name: Daily Codex PR Review Ping
 
 on:
   schedule:
-    # 08:05 Beijing Time (UTC+8) = 00:05 UTC
-    - cron: '5 0 * * *'
+    # 08:00 Beijing Time (UTC+8) = 00:00 UTC
+    - cron: '0 0 * * *'
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Print action only, do not publish issue/comment'
-        required: false
-        default: 'false'
-      mode:
-        description: 'Ping mode: issue / pr / both'
-        required: false
-        default: 'both'
-      pull_number:
-        description: 'Optional target PR number when mode includes pr'
-        required: false
-        default: ''
 
 permissions:
-  contents: read
-  issues: write
-  pull-requests: read
+  contents: write
+  pull-requests: write
 
 jobs:
-  ping:
+  daily-pr-and-review:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Post daily Codex ping comment
+      - name: Prepare minimal daily change
+        run: |
+          mkdir -p .github
+          TS_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          TS_CST="$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S %Z')"
+          {
+            echo "# Daily Codex Auto PR"
+            echo
+            echo "- UTC time: ${TS_UTC}"
+            echo "- Beijing time: ${TS_CST}"
+          } > .github/daily-codex-pr.md
+
+      - name: Create daily PR
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'chore: daily codex auto pr marker'
+          branch: chore/daily-codex-auto-pr
+          delete-branch: false
+          title: 'chore: daily codex auto PR'
+          body: |
+            This PR is automatically created by workflow at 08:00 Beijing time each day.
+
+            It intentionally contains only a minimal update with current time info.
+            No merge is required.
+          labels: |
+            codex-auto-ping
+
+      - name: Ask Codex to review the PR
+        if: steps.cpr.outputs.pull-request-number != ''
         uses: actions/github-script@v9
-        env:
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          MODE: ${{ github.event.inputs.mode || 'both' }}
-          PULL_NUMBER: ${{ github.event.inputs.pull_number || '' }}
         with:
           script: |
-            const { run } = require('./.github/scripts/daily-codex-ping')
-
-            const dryRun = String(process.env.DRY_RUN).toLowerCase() === 'true'
-            const mode = String(process.env.MODE || 'both')
-            const pullNumber = String(process.env.PULL_NUMBER || '')
-
-            const result = await run({
-              github,
-              context,
-              core,
-              dryRun,
-              mode,
-              pullNumber,
-              now: new Date()
+            const prNumber = Number('${{ steps.cpr.outputs.pull-request-number }}')
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: [
+                '@codex Please review this auto-generated PR.',
+                'Focus on quick sanity checks only; no code changes required.'
+              ].join('\n')
             })
-
-            core.info(`Run result: ${JSON.stringify(result)}`)
