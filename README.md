@@ -1,14 +1,8 @@
 # say-hello
 
-用于每天自动创建一个“最小变更 PR”，并请 `@codex` 做 review。
-
-## 当前行为
+每天北京时间 08:00 自动执行：创建一个包含当次时间的最小改动 PR，并在 PR 下 `@codex` 发起 review。
 
 - 工作流：`.github/workflows/daily-codex-comment.yml`
-- 触发时间：每天 **北京时间 08:00**（UTC `0 0 * * *`）
-- 执行内容：
-  1. 生成/更新 `.github/daily-codex-pr.md`（仅写入当次时间）
-  2. 自动创建或更新 PR（无需合入）
-  3. 在该 PR 下评论 `@codex` 发起 review
-
-支持 `workflow_dispatch` 手动触发。
+- 触发：`cron: 0 0 * * *`（UTC）+ `workflow_dispatch`
+- 每次运行都会创建**新的** PR（独立分支）
+- PR 不要求合并

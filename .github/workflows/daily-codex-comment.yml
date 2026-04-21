@@ -31,10 +31,10 @@ jobs:
 
       - name: Create daily PR
         id: cpr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: 'chore: daily codex auto pr marker'
-          branch: chore/daily-codex-auto-pr
+          branch: chore/daily-codex-auto-pr-${{ github.run_id }}-${{ github.run_attempt }}
           delete-branch: false
           title: 'chore: daily codex auto PR'
           body: |
@@ -46,7 +46,7 @@ jobs:
             codex-auto-ping
 
       - name: Ask Codex to review the PR
-        if: steps.cpr.outputs.pull-request-number != ''
+        if: steps.cpr.outputs.pull-request-number != '' && steps.cpr.outputs.pull-request-operation == 'created'
         uses: actions/github-script@v9
         with:
           script: |
